@@ -1,0 +1,1 @@
+"""Vacature agent backend."""
