@@ -3,35 +3,59 @@
 Containerized multi-site vacancy scanner for **detachering / extern / inlener** roles.
 
 - Config-driven **json**, **html**, and **agent** adapters
-- Deterministic staffing gate + STACKIT LLM classifier (`Qwen/Qwen3.8-27B`)
-- Web dashboard to manage sources and approve/reject listings
+- Deterministic staffing gate + STACKIT LLM classifier
+- Web dashboard with **New / Open / Removed** listing inbox
+- Admin discovery (propose career pages, portal harvest, broker denylist)
 
-Seeded sources (employer career sites):
+Seeded employer sources:
 
-1. Werken bij ANWB — JSON API filtered on `Dienstverband=Inhuur`
-2. Werken bij NS — HTML list at `/vacatures?keywords=Inhuur`
-3. WerkenvoorNederland ICT (+ inhuur term) — agent
-4. WerkenbijdeOverheid, Belastingdienst, Amsterdam, Defensie, Achmea
-5. Enexis + Radboudumc (HTML), Port of Rotterdam (agent)
-6. Rijkswaterstaat / Kadaster / DICTU ICT via WerkenvoorNederland (agent)
+1. **Werken bij ANWB** — JSON API filtered on `Dienstverband=Inhuur`
+2. **Werken bij NS** — HTML list at `/vacatures?keywords=Inhuur`
 
-Add more via **Admin → Sources → Quick add career URL** (creates an agent source).
+Add more via **Admin → Sources → Quick add** or **Admin → Discover**.
 
-## Quick start (Docker)
+## Quick start (Docker Compose)
+
+Requirements: Docker Desktop (or Docker Engine + Compose v2).
 
 ```bash
+git clone https://github.com/Bromhir84/vacature-agent.git
+cd vacature-agent
+
 cp .env.example .env
-# set LLM_API_KEY to your STACKIT AI Model Serving token
+# edit .env and set LLM_API_KEY (STACKIT AI Model Serving token)
 
 docker compose up --build -d
 ```
 
-- UI: http://localhost:43218
-- API: http://localhost:8000/api/health
+On Windows PowerShell:
+
+```powershell
+git clone https://github.com/Bromhir84/vacature-agent.git
+cd vacature-agent
+Copy-Item .env.example .env
+# edit .env → LLM_API_KEY=...
+docker compose up --build -d
+```
+
+| Service | URL |
+| --- | --- |
+| UI | http://localhost:43218 |
+| API health | http://localhost:8000/api/health |
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f api
+docker compose up --build -d          # rebuild after code changes
+docker compose down                   # stop
+docker compose down -v                # stop + wipe SQLite volume
+```
 
 Then open **Admin → Sources → Scan all** (or wait for the scheduled interval).
 
-## Local development
+## Local development (without Compose)
 
 ### Backend
 
@@ -57,29 +81,26 @@ Vite proxies `/api` to `http://localhost:8000`.
 
 ## STACKIT LLM
 
-Uses the same OpenAI-compatible endpoint as `coa-equal-rewards`:
-
 | Variable | Default |
 | --- | --- |
 | `LLM_BASE_URL` | `https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1` |
 | `LLM_MODEL` | `Qwen/Qwen3.8-27B` |
 | `LLM_API_KEY` | your STACKIT token |
 
-Without `LLM_API_KEY`, scans still discover listings and the deterministic gate can promote matches to `candidate` (useful for smoke tests).
+Without `LLM_API_KEY`, scans still discover listings; the deterministic gate can promote matches (useful for smoke tests). You can also set the key later in **Admin → Settings**.
 
 ## Adapters
 
 ### json
 Point `list_url` at a vacancy JSON API and map fields in `config.item_map`.
-Supports root-array responses (`pagination.items_path: "$"`), `employment_map`, and client-side `filter`.
 
 ### html
-Point `list_url` (+ optional `query`) at an SSR overview page and configure CSS selectors.
+Point `list_url` (+ optional `query`) at an SSR overview page and configure CSS selectors. Supports Hippo CMS fragments (`hippo_component`) and `pagination.page_param`.
 
 ### agent
 LLM tool loop (`http_get`, `extract_links`) for arbitrary employer career pages.
-Supports `focus_keywords` in config to bias discovery (inhuur / ICT by default).
-Optional Compose profile:
+
+Optional Playwright sidecar:
 
 ```bash
 docker compose --profile browser up -d
@@ -88,10 +109,11 @@ docker compose --profile browser up -d
 ## API sketch
 
 - `GET/POST /api/sources`
-- `GET /api/listings?status=candidate`
-- `POST /api/listings/{id}/review`
+- `GET /api/listings?status=new|open|removed`
+- `POST /api/listings/{id}/view`
 - `POST /api/scans/run`
-- `POST /api/crawl/run` (open-web vacature URL crawler + heuristic relevance score)
-- `GET/PATCH /api/settings` (LLM key/base/model + filters; secrets masked in responses)
+- `POST /api/discovery/propose` / `harvest`
+- `POST /api/crawl/run`
+- `GET/PATCH /api/settings`
 
-Admin UI at `/admin/sources`, `/admin/discover`, `/admin/runs`, `/admin/settings`, and `/admin/filters`.
+Admin UI: `/admin/sources`, `/admin/discover`, `/admin/runs`, `/admin/settings`, `/admin/filters`.
